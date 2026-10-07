@@ -1,8 +1,10 @@
 name: F-Droid APK (GMS-free personal build)
 
-# Builds the upstream F-Droid source profile of the Paseo Android app
+# Builds the F-Droid source profile of the Paseo Android app
 # (see docs/android.md): no Firebase/GMS native modules, no push
-# notifications, no QR scanning (paste pairing links instead).
+# notifications. Source is this fork's fdroid-v0.11.0 branch (upstream
+# v0.11.0 + patches), which also restores QR pairing scanning without
+# Google services (local paseo-qrscan module: CameraX + ZXing).
 # The APK is signed with a personal keystore kept in repo secrets so
 # future builds can update in place.
 
@@ -10,9 +12,9 @@ on:
   workflow_dispatch:
     inputs:
       source_ref:
-        description: "Upstream tag or branch to build"
+        description: "Fork branch or tag to build"
         required: true
-        default: "v0.11.0"
+        default: "fdroid-v0.11.0"
         type: string
 
 permissions:
@@ -30,10 +32,10 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          # Build the upstream release, not the fork: the fork carries no
-          # upstream tags, so checking out a tag like v0.11.0 from the fork
-          # fails with "A branch or tag with the name ... could not be found".
-          repository: getpaseo/paseo
+          # Build this fork's fdroid-v0.11.0 branch: upstream v0.11.0 plus
+          # the fork's patches (GMS-free QR scanning). The fork also carries
+          # a backup of the upstream v0.11.0 tag.
+          repository: ${{ github.repository }}
           ref: ${{ inputs.source_ref }}
           fetch-depth: 0
 
@@ -104,6 +106,27 @@ jobs:
           cd packages/app
           npx expo prebuild --platform android --clean --non-interactive
 
+      - name: Bump install versionCode (+1)
+        shell: bash
+        run: |
+          # Same versionName as the previous build (0.11.0), so bump the
+          # generated versionCode by 1 to let phones install this build
+          # over the previous one. The F-Droid plugin multiplies the base
+          # versionCode by 10 and adds an ABI suffix at configuration
+          # time, so bumping the literal here flows through.
+          set -euo pipefail
+          python3 - <<'EOF'
+          import re
+          p = "packages/app/android/app/build.gradle"
+          s = open(p).read()
+          m = re.search(r"versionCode\s+(\d+)", s)
+          assert m, "versionCode not found in app/build.gradle"
+          bumped = int(m.group(1)) + 1
+          s = s[:m.start(1)] + str(bumped) + s[m.end(1):]
+          open(p, "w").write(s)
+          print(f"versionCode bumped: {m.group(1)} -> {bumped}")
+          EOF
+
       - name: Bridge local modules into F-Droid autolinking overlay
         shell: bash
         run: |
@@ -159,7 +182,7 @@ jobs:
           BT="$ANDROID_HOME/build-tools/35.0.0"
           SRC="$(find packages/app/android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
           echo "Built APK: $SRC"
-          OUT="paseo-fdroid-${{ inputs.source_ref }}-arm64.apk"
+          OUT="paseo-fdroid-v0.11.0-arm64.apk"
           "$BT/zipalign" -f -p 4 "$SRC" "$RUNNER_TEMP/aligned.apk"
           "$BT/apksigner" sign \
             --ks "$RUNNER_TEMP/upload-keystore.p12" \
@@ -185,12 +208,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          TAG="fdroid-${{ inputs.source_ref }}"
-          # The checkout above is the upstream repo, so gh would otherwise
-          # target getpaseo/paseo; pin releases to this fork explicitly.
+          TAG="fdroid-v0.11.0"
+          # Pin releases to this fork explicitly (the build workspace is a
+          # plain checkout; gh must not guess another repo from remotes).
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
             --title "Paseo $TAG (GMS-free personal build)" \
-            --notes "F-Droid profile build of Paseo for phones without Google services (e.g. Huawei). No Firebase/GMS code, no push notifications, no QR scanning - use a pasted pairing link instead. arm64-v8a." \
+            --notes "F-Droid profile build of Paseo for phones without Google services (e.g. Huawei). No Firebase/GMS code, no push notifications. QR pairing scanning restored via CameraX + ZXing (no ML Kit/GMS). arm64-v8a." \
             2>/dev/null || true
           gh release upload "$TAG" "$APK_OUT" --repo "${{ github.repository }}" --clobber
