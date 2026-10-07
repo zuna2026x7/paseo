@@ -1,0 +1,25 @@
+apply plugin: 'com.android.library'
+
+group = 'sh.paseo.qrscan'
+version = '0.1.0'
+
+def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useDefaultAndroidSdkVersions()
+
+android {
+  namespace "sh.paseo.qrscan"
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+  // CameraX is AndroidX (AOSP) and ZXing is Apache-2.0: QR scanning with no
+  // Google Mobile Services / ML Kit dependency, so it works on Huawei.
+  implementation "androidx.camera:camera-core:1.5.1"
+  implementation "androidx.camera:camera-camera2:1.5.1"
+  implementation "androidx.camera:camera-lifecycle:1.5.1"
+  implementation "androidx.camera:camera-view:1.5.1"
+  implementation "com.google.zxing:core:3.5.3"
+}
