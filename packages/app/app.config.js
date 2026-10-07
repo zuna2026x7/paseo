@@ -6,6 +6,7 @@ const withAndroidProfileable = require("./plugins/with-android-profileable");
 const withFdroidAutolinking = require("./plugins/with-fdroid-autolinking");
 const withPasteInput = require("./plugins/with-paste-input");
 const withAndroidScroll = require("./modules/paseo-scroll/app.plugin");
+const withAndroidQrScan = require("./modules/paseo-qrscan/app.plugin");
 const { getNativeReleaseVersion } = require("./native-release-version");
 const appVariant = process.env.APP_VARIANT ?? "production";
 const isFdroidBuild = process.env.PASEO_FDROID_BUILD === "1";
@@ -19,7 +20,7 @@ const buildProfile = isFdroidBuild
         "android.permission.MODIFY_AUDIO_SETTINGS",
       ],
       cameraPlugins: [],
-      fdroidPlugins: [withFdroidAutolinking],
+      fdroidPlugins: [withFdroidAutolinking, withAndroidQrScan],
       notificationPlugins: [],
     }
   : {
