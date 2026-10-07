@@ -104,6 +104,21 @@ jobs:
           cd packages/app
           npx expo prebuild --platform android --clean --non-interactive
 
+      - name: Add swap headroom for native build
+        shell: bash
+        run: |
+          # Three consecutive runs (37647706615, 37653718702, 37657220885)
+          # were cancelled with no error at the same point: right after the
+          # JS bundle finished, during the native (CMake/NDK) compile —
+          # the signature of the standard runner dying under memory
+          # pressure. Give it swap headroom before the heavy phase.
+          set -euxo pipefail
+          sudo fallocate -l 12G /swapfile-paseo || sudo dd if=/dev/zero of=/swapfile-paseo bs=1M count=12288
+          sudo chmod 600 /swapfile-paseo
+          sudo mkswap /swapfile-paseo
+          sudo swapon /swapfile-paseo
+          free -h
+
       - name: Gradle assembleRelease (arm64-v8a)
         env:
           PASEO_FDROID_BUILD: "1"
