@@ -65,6 +65,22 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses > /dev/null || true
           "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+          # Pre-install the exact NDK AGP asks for. Letting Gradle fetch it
+          # mid-build failed once with a corrupt download
+          # ("Archive is not a ZIP archive", run 37652399005), so install it
+          # here with retries and partial-install cleanup instead.
+          for i in 1 2 3; do
+            if "$SDKMANAGER" "ndk;27.1.12297006"; then
+              break
+            fi
+            echo "NDK install attempt $i failed; cleaning partial install"
+            rm -rf "$ANDROID_HOME/ndk/27.1.12297006"
+            if [ "$i" -eq 3 ]; then
+              echo "NDK install failed after 3 attempts"
+              exit 1
+            fi
+            sleep 10
+          done
 
       - name: Restore signing keystore
         env:
