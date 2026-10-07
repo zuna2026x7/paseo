@@ -46,6 +46,12 @@ jobs:
       - name: Install JS dependencies
         run: node scripts/npm-retry.mjs ci
 
+      - name: Build app workspace dependencies
+        # Metro bundling fails without the workspace dist outputs
+        # (@getpaseo/highlight/dist/index.js etc.). Upstream CI and the
+        # app's eas-build-post-install hook both run this step.
+        run: npm run build:app-deps
+
       - name: Setup Java 21
         uses: actions/setup-java@v4
         with:
