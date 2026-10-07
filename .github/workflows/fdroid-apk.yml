@@ -30,6 +30,10 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
+          # Build the upstream release, not the fork: the fork carries no
+          # upstream tags, so checking out a tag like v0.11.0 from the fork
+          # fails with "A branch or tag with the name ... could not be found".
+          repository: getpaseo/paseo
           ref: ${{ inputs.source_ref }}
           fetch-depth: 0
 
@@ -125,8 +129,11 @@ jobs:
         run: |
           set -euo pipefail
           TAG="fdroid-${{ inputs.source_ref }}"
+          # The checkout above is the upstream repo, so gh would otherwise
+          # target getpaseo/paseo; pin releases to this fork explicitly.
           gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
             --title "Paseo $TAG (GMS-free personal build)" \
             --notes "F-Droid profile build of Paseo for phones without Google services (e.g. Huawei). No Firebase/GMS code, no push notifications, no QR scanning - use a pasted pairing link instead. arm64-v8a." \
             2>/dev/null || true
-          gh release upload "$TAG" "$APK_OUT" --clobber
+          gh release upload "$TAG" "$APK_OUT" --repo "${{ github.repository }}" --clobber
