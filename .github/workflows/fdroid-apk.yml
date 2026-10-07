@@ -1,0 +1,132 @@
+name: F-Droid APK (GMS-free personal build)
+
+# Builds the upstream F-Droid source profile of the Paseo Android app
+# (see docs/android.md): no Firebase/GMS native modules, no push
+# notifications, no QR scanning (paste pairing links instead).
+# The APK is signed with a personal keystore kept in repo secrets so
+# future builds can update in place.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Upstream tag or branch to build"
+        required: true
+        default: "v0.11.0"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fdroid-apk-${{ inputs.source_ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install JS dependencies
+        run: node scripts/npm-retry.mjs ci
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Restore signing keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$KS_B64" ]; then
+            echo "ANDROID_KEYSTORE_B64 secret is missing."
+            exit 1
+          fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/upload-keystore.p12"
+
+      - name: Expo prebuild (F-Droid profile)
+        env:
+          PASEO_FDROID_BUILD: "1"
+          APP_VARIANT: production
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd packages/app
+          npx expo prebuild --platform android --clean --non-interactive
+
+      - name: Gradle assembleRelease (arm64-v8a)
+        env:
+          PASEO_FDROID_BUILD: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd packages/app/android
+          ./gradlew assembleRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            --no-daemon --max-workers=1 -Dorg.gradle.parallel=false
+
+      - name: Sign and verify APK
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          SRC="$(find packages/app/android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          echo "Built APK: $SRC"
+          OUT="paseo-fdroid-${{ inputs.source_ref }}-arm64.apk"
+          "$BT/zipalign" -f -p 4 "$SRC" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign \
+            --ks "$RUNNER_TEMP/upload-keystore.p12" \
+            --ks-type PKCS12 \
+            --ks-key-alias upload \
+            --ks-pass "pass:$KS_PASS" \
+            --key-pass "pass:$KS_PASS" \
+            --out "$OUT" \
+            "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" verify --print-certs "$OUT"
+          echo "APK_OUT=$OUT" >> "$GITHUB_ENV"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: paseo-fdroid-apk-${{ inputs.source_ref }}
+          path: ${{ env.APK_OUT }}
+          if-no-files-found: error
+
+      - name: Publish APK to fork release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="fdroid-${{ inputs.source_ref }}"
+          gh release create "$TAG" \
+            --title "Paseo $TAG (GMS-free personal build)" \
+            --notes "F-Droid profile build of Paseo for phones without Google services (e.g. Huawei). No Firebase/GMS code, no push notifications, no QR scanning - use a pasted pairing link instead. arm64-v8a." \
+            2>/dev/null || true
+          gh release upload "$TAG" "$APK_OUT" --clobber
