@@ -104,6 +104,26 @@ jobs:
           cd packages/app
           npx expo prebuild --platform android --clean --non-interactive
 
+      - name: Bridge local modules into F-Droid autolinking overlay
+        shell: bash
+        run: |
+          # The F-Droid plugin points expoAutolinking.projectRoot at
+          # android/fdroid-autolinking, so autolinking looks for local
+          # modules under <overlay>/modules and silently drops the real
+          # ones in packages/app/modules — including paseo-scroll, whose
+          # PaseoScrollPackage MainApplication registers (compile error
+          # "Unresolved reference 'scroll'", run 37660310675). Upstream's
+          # F-Droid profile (2026-07) predates paseo-scroll (2026-09) and
+          # was never re-verified. Symlink the real modules dir into the
+          # overlay to restore parity with the normal build.
+          set -euo pipefail
+          OVERLAY="packages/app/android/fdroid-autolinking"
+          ls "$OVERLAY"
+          if [ ! -e "$OVERLAY/modules" ]; then
+            ln -s ../../modules "$OVERLAY/modules"
+          fi
+          ls "$OVERLAY/modules"
+
       - name: Add swap headroom for native build
         shell: bash
         run: |
