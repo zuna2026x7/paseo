@@ -14,9 +14,11 @@ import { useTranslation } from "react-i18next";
 // F-Droid build (see metro.config.cjs fdroidModuleOverrides). It implements
 // exactly the surface the pairing scan screen uses — useCameraPermissions
 // and CameraView with onBarcodeScanned — backed by the paseo-qrscan native
-// module (CameraX + ZXing, no Google services). Tapping the camera area
-// opens the full-screen scanner; a successful decode is reported through
-// onBarcodeScanned just like expo-camera.
+// module (CameraX + ZXing, no Google services). The scanner opens on its
+// own as soon as the scan screen appears (the screen only mounts this
+// component once camera permission is granted); if the user backs out of
+// the scanner, tapping the camera area opens it again. A successful decode
+// is reported through onBarcodeScanned just like expo-camera.
 
 interface CameraPermission {
   status: "granted" | "denied";
@@ -122,7 +124,7 @@ export function CameraView(props: {
   const onBarcodeScannedRef = useRef(props.onBarcodeScanned);
   onBarcodeScannedRef.current = props.onBarcodeScanned;
 
-  const handlePress = useCallback(async () => {
+  const startScan = useCallback(async () => {
     if (scanningRef.current || !PaseoQrScan) return;
     scanningRef.current = true;
     try {
@@ -139,14 +141,25 @@ export function CameraView(props: {
         });
       }
     } catch {
-      // Scanner dismissed or unavailable; tapping again retries.
+      // Scanner dismissed or unavailable; tapping the camera area retries.
     } finally {
       scanningRef.current = false;
     }
   }, []);
 
+  // Open the scanner as soon as the scan screen shows this component, so
+  // pairing takes one tap on "Scan QR code" and not a second tap here.
+  // The short delay lets the navigation transition settle before the
+  // native scanner activity opens.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void startScan();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [startScan]);
+
   return (
-    <Pressable style={[styles.scanner, props.style]} onPress={handlePress}>
+    <Pressable style={[styles.scanner, props.style]} onPress={startScan}>
       <Text style={styles.scannerTitle}>
         {t("pairing.connectionMethods.scanQr.title", {
           defaultValue: "Scan QR code",
