@@ -106,12 +106,13 @@ jobs:
           cd packages/app
           npx expo prebuild --platform android --clean --non-interactive
 
-      - name: Bump install versionCode (+1)
+      - name: Bump install versionCode (+2)
         shell: bash
         run: |
-          # Same versionName as the previous build (0.11.0), so bump the
-          # generated versionCode by 1 to let phones install this build
-          # over the previous one. The F-Droid plugin multiplies the base
+          # Same versionName as the previous builds (0.11.0), so bump the
+          # generated versionCode above the highest build already shipped
+          # (+2: the QR build shipped at +1) to let phones install this
+          # build over it. The F-Droid plugin multiplies the base
           # versionCode by 10 and adds an ABI suffix at configuration
           # time, so bumping the literal here flows through.
           set -euo pipefail
@@ -121,7 +122,7 @@ jobs:
           s = open(p).read()
           m = re.search(r"versionCode\s+(\d+)", s)
           assert m, "versionCode not found in app/build.gradle"
-          bumped = int(m.group(1)) + 1
+          bumped = int(m.group(1)) + 2
           s = s[:m.start(1)] + str(bumped) + s[m.end(1):]
           open(p, "w").write(s)
           print(f"versionCode bumped: {m.group(1)} -> {bumped}")
