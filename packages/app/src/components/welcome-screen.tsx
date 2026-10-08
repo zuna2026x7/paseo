@@ -23,7 +23,6 @@ import { formatVersionWithPrefix } from "@/desktop/updates/desktop-updates";
 import { buildOpenProjectRoute } from "@/utils/host-routes";
 import { PaseoLogo } from "@/components/icons/paseo-logo";
 import { openExternalUrl } from "@/utils/open-external-url";
-import { isFdroidBuild } from "@/constants/build-profile";
 import { isWeb, isNative } from "@/constants/platform";
 import { isElectronRuntime } from "@/desktop/host";
 
@@ -215,7 +214,7 @@ export function WelcomeScreen({ onHostAdded }: WelcomeScreenProps) {
   );
 
   const actions: WelcomeAction[] =
-    isWeb || isFdroidBuild
+    isWeb
       ? [
           {
             key: "direct-connection",
