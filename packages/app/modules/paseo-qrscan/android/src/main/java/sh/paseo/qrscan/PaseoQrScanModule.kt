@@ -29,7 +29,7 @@ class PaseoQrScanModule(reactContext: ReactApplicationContext) :
 
   @ReactMethod
   fun scanQr(promise: Promise) {
-    val activity = currentActivity
+    val activity = getCurrentActivity()
     if (activity == null) {
       promise.reject("no_activity", "No foreground activity available for scanning")
       return
